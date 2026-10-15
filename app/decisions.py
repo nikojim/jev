@@ -119,4 +119,7 @@ def parse_decisions(response: dict) -> dict:
         "severity_score": severity_score,
         "severity_reason": severity_reason,
         "escalate_probability": p_escalate,
+        "team_confidence": team.get("confidence"),
+        "urgency_confidence": urgency.get("confidence"),
+        "severity_confidence": severity.get("confidence"),
     }

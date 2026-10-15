@@ -12,7 +12,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.config import ROOT, load_settings
 from app.llm import OpenRouterClient, build_payload
-from app.schemas import ComparisonResponse, Ticket
+from app.schemas import REVIEW_MODES, ComparisonResponse, Ticket
 from app.severity import configure as configure_severity
 from app.severity import load_severity, ranks as severity_ranks
 from app.skills import load_skills
@@ -95,6 +95,7 @@ async def get_models(request: Request):
         "jev_model": s.jev_model,
         "auto_min_prob": s.auto_min_prob,
         "auto_min_confidence": s.auto_min_confidence,
+        "human_review_mode": s.human_review_mode,
         "models": [
             {
                 "id": m,
@@ -108,26 +109,36 @@ async def get_models(request: Request):
     }
 
 
+def _review_mode(value: str | None) -> str | None:
+    """Optional ?review_mode= override of HUMAN_REVIEW_MODE for one request."""
+    if value is None or value == "":
+        return None
+    if value not in REVIEW_MODES:
+        raise HTTPException(400, f"review_mode must be one of {', '.join(REVIEW_MODES)}")
+    return value
+
+
 @app.post("/api/triage", response_model=ComparisonResponse)
-async def triage(ticket: Ticket, request: Request):
-    runs, skills = await request.app.state.triager.run_ticket(ticket)
+async def triage(ticket: Ticket, request: Request, review_mode: str | None = None):
+    runs, skills = await request.app.state.triager.run_ticket(ticket, review_mode=_review_mode(review_mode))
     return ComparisonResponse(ticket=ticket, skills=skills, runs=runs)
 
 
 @app.post("/api/triage/stream")
-async def triage_stream(ticket: Ticket, request: Request):
+async def triage_stream(ticket: Ticket, request: Request, review_mode: str | None = None):
     """Same as /api/triage, streamed as NDJSON for progress: a 'start' line with the models, one 'model' line
     per model as it finishes (metrics + status), then a 'result' line with the full ComparisonResponse."""
     triager = request.app.state.triager
     models = request.app.state.settings.models
     queue: asyncio.Queue = asyncio.Queue()
+    mode = _review_mode(review_mode)
 
     async def on_done(i: int, run):
         await queue.put({"type": "model", "index": i, "model": run.model, "ok": run.result is not None,
                          "error": run.error, "metrics": run.metrics.model_dump()})
 
     async def work():
-        runs, skills = await triager.run_ticket(ticket, on_done)
+        runs, skills = await triager.run_ticket(ticket, on_done, mode)
         await queue.put({"type": "result", **ComparisonResponse(ticket=ticket, skills=skills, runs=runs).model_dump()})
 
     async def stream():
@@ -209,14 +220,15 @@ def parse_csv(raw: bytes) -> list[Ticket]:
 
 
 @app.post("/api/batch")
-async def batch(request: Request, file: UploadFile = File(...)):
+async def batch(request: Request, file: UploadFile = File(...), review_mode: str | None = None):
     """Streams NDJSON: a 'start' line, one 'ticket' line per finished ticket, then a 'summary' line."""
     tickets = parse_csv(await file.read())
+    mode = _review_mode(review_mode)
     state = request.app.state
     models = state.settings.models
 
     async def run(i: int, t: Ticket):
-        runs, skills = await state.triager.run_ticket(t)
+        runs, skills = await state.triager.run_ticket(t, review_mode=mode)
         return i, runs, skills
 
     async def stream():

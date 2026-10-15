@@ -33,7 +33,8 @@ class Triager:
         # models that only work with the Decisions API (detected by id, or learned from a chat 400)
         self.decision_models = {m for m in settings.models if is_decisions_model(m)}
 
-    async def run_ticket(self, ticket: Ticket, on_model_done=None) -> tuple[list[ModelRun], list[str]]:
+    async def run_ticket(self, ticket: Ticket, on_model_done=None,
+                         review_mode: str | None = None) -> tuple[list[ModelRun], list[str]]:
         """Returns the runs (jev first) and the names of the skills applied. Every model gets the same skills.
 
         on_model_done(index, run) is awaited as soon as each model finishes (used to stream progress).
@@ -41,8 +42,14 @@ class Triager:
         user, skills = self.build_user_prompt(ticket)
         guidelines = self.guidelines(ticket)
 
+        mode = review_mode or self.settings.human_review_mode
+
         async def one(i: int, model: str) -> ModelRun:
             run = await self._run_model(model, ticket, user, guidelines)
+            if run.result:
+                run.decision = self.decide(run, mode)
+            elif run.decision:
+                run.decision.mode = mode
             if on_model_done:
                 await on_model_done(i, run)
             return run
@@ -93,8 +100,7 @@ class Triager:
             run.error = f"Invalid response: {str(e).splitlines()[0]}"
             run.decision = Decision(automatic=False, reasons=["Invalid response from model"])
             return run
-        lp = team_logprob(completion.text, completion.logprobs, run.result.team)
-        run.decision = decide(run.result, self.settings.auto_min_prob, self.settings.auto_min_confidence, lp)
+        run.team_logprob = team_logprob(completion.text, completion.logprobs, run.result.team)
         return run
 
     async def _run_decisions(self, model: str, ticket: Ticket, guidelines: str) -> ModelRun:
@@ -113,9 +119,13 @@ class Triager:
             run.error = f"Invalid response: {str(e).splitlines()[0]}"
             run.decision = Decision(automatic=False, reasons=["Invalid response from model"])
             return run
-        run.decision = decide(run.result, self.settings.auto_min_prob, self.settings.auto_min_confidence,
-                              source="decision model")
         return run
+
+    def decide(self, run: ModelRun, mode: str) -> Decision:
+        """Automatic vs human review for a successful run, with the given HUMAN_REVIEW_MODE."""
+        source = "decision model" if run.api == "decisions" else "self-reported"
+        return decide(run.result, self.settings.auto_min_prob, self.settings.auto_min_confidence,
+                      run.team_logprob, source, mode)
 
     def parse_result(self, data: dict) -> TriageResult:
         by_lower = {n.lower(): n for n in self.team_names}
@@ -160,28 +170,50 @@ def normalize_probs(raw, team_names: list[str]) -> dict[str, float]:
 
 
 def decide(result: TriageResult, min_prob: float, min_conf: float, logprob: float | None = None,
-           source: str = "self-reported") -> Decision:
-    reasons: list[str] = []
+           source: str = "self-reported", mode: str = "default") -> Decision:
+    """Automatic vs human review.
+
+    mode "default": team checks + overall confidence + critical urgency.
+    mode "team":    only the team (probability, tie, team confidence).
+    mode "urgency": only the urgency (critical, urgency probability, urgency confidence).
+    Per-question confidences come from decision models; chat models only have the overall confidence.
+    """
     probs = result.team_probabilities
     top_prob = probs.get(result.team) if probs else None
     if logprob is not None and top_prob is not None:
         top_prob, source = min(top_prob, logprob), "logprobs+self-reported"
 
+    team_reasons: list[str] = []
     if top_prob is None:
-        reasons.append("Model returned no team probabilities")
+        team_reasons.append("Model returned no team probabilities")
     else:
         if top_prob < min_prob:
-            reasons.append(f"Team probability {top_prob:.2f} is below {min_prob:.2f}")
+            team_reasons.append(f"Team probability {top_prob:.2f} is below {min_prob:.2f}")
         ranked = sorted(probs.items(), key=lambda kv: kv[1], reverse=True)
         if ranked[0][0] != result.team:
-            reasons.append(f"Chosen team differs from the most probable team ({ranked[0][0]})")
+            team_reasons.append(f"Chosen team differs from the most probable team ({ranked[0][0]})")
         elif len(ranked) > 1 and ranked[0][1] - ranked[1][1] < TIE_MARGIN:
-            reasons.append(f"Near tie between {ranked[0][0]} and {ranked[1][0]}")
-    if result.confidence < min_conf:
-        reasons.append(f"Confidence {result.confidence:.2f} is below {min_conf:.2f}")
-    if result.urgency == "critical":
-        reasons.append("Critical urgency always requires human review")
-    return Decision(automatic=not reasons, top_prob=top_prob, prob_source=source, reasons=reasons)
+            team_reasons.append(f"Near tie between {ranked[0][0]} and {ranked[1][0]}")
+    critical = ["Critical urgency always requires human review"] if result.urgency == "critical" else []
+
+    reasons: list[str] = []
+    if mode == "team":
+        team_conf = result.team_confidence if result.team_confidence is not None else result.confidence
+        reasons = team_reasons + ([f"Team confidence {team_conf:.2f} is below {min_conf:.2f}"] if team_conf < min_conf else [])
+    elif mode == "urgency":
+        urg_conf = result.urgency_confidence if result.urgency_confidence is not None else result.confidence
+        urg_prob = result.urgency_probabilities.get(result.urgency) if result.urgency_probabilities else None
+        reasons = list(critical)
+        if urg_prob is not None and urg_prob < min_prob:
+            reasons.append(f"Urgency probability {urg_prob:.2f} is below {min_prob:.2f}")
+        if urg_conf < min_conf:
+            reasons.append(f"Urgency confidence {urg_conf:.2f} is below {min_conf:.2f}")
+    else:
+        reasons = list(team_reasons)
+        if result.confidence < min_conf:
+            reasons.append(f"Confidence {result.confidence:.2f} is below {min_conf:.2f}")
+        reasons += critical
+    return Decision(automatic=not reasons, top_prob=top_prob, prob_source=source, reasons=reasons, mode=mode)
 
 
 def _p95(values: list[float]) -> float | None:

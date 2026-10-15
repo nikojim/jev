@@ -79,7 +79,7 @@ def test_team_logprob_joint_probability():
 def _settings(**kw) -> Settings:
     base = dict(api_key="k", base_url="https://or.test/api/v1", jev_model="jev/model", compare_models=["other/model"],
                 teams_file=ROOT / "teams.yaml", skills_dir=ROOT / "skills", severity_file=ROOT / "severity.yaml", tiers_file=ROOT / "tiers.yaml", max_skills=3, auto_min_prob=0.8,
-                auto_min_confidence=0.8, max_concurrency=2, request_timeout=10)
+                auto_min_confidence=0.8, human_review_mode="default", max_concurrency=2, request_timeout=10)
     base.update(kw)
     return Settings(**base)
 
@@ -282,6 +282,7 @@ def test_parse_decisions_maps_to_triage_fields():
     d = parse_decisions(DECISIONS_RESPONSE)
     assert d["team"] == "Technical Support" and d["urgency"] == "critical"
     assert d["confidence"] == 0.85                      # weaker of team (1.0) and urgency (0.85)
+    assert (d["team_confidence"], d["urgency_confidence"], d["severity_confidence"]) == (1, 0.85, 0.68)
     assert d["severity_score"] == pytest.approx(69.5 + 0.61 * 30.5)  # between the SEV-2 midpoint and 100
     assert d["escalate"] is True and d["escalate_probability"] == 0.97
     assert d["summary"] == "" and d["suggested_reply"] == "" and d["next_steps"] == []
@@ -432,3 +433,55 @@ def test_urgency_meaning_and_jev_urgency_probabilities():
     assert build_decisions_payload("m", Ticket(body="b"), teams, "")["questions"]["urgency"]["criteria"] == URGENCY_DEFINITIONS
     s = system_prompt(teams)
     assert "- critical: " + URGENCY_DEFINITIONS["critical"] in s and '"urgency_reason" explains' in s
+
+
+# ---------- human review modes (HUMAN_REVIEW_MODE / ?review_mode=) ----------
+
+def _jev_result(**kw) -> TriageResult:
+    base = dict(team="Billing & Payments", team_probabilities={"Billing & Payments": 0.95, "Technical Support": 0.05},
+                urgency="high", urgency_probabilities={"high": 0.9, "critical": 0.1}, confidence=0.9,
+                team_confidence=0.95, urgency_confidence=0.9)
+    base.update(kw)
+    return TriageResult(**base)
+
+
+def test_review_mode_default_is_unchanged():
+    assert decide(_jev_result(), 0.8, 0.8).automatic
+    d = decide(_jev_result(urgency="critical"), 0.8, 0.8)
+    assert not d.automatic and d.mode == "default" and any("Critical" in r for r in d.reasons)
+
+
+def test_review_mode_team_ignores_urgency():
+    crit = _jev_result(urgency="critical", urgency_confidence=0.3, confidence=0.3)
+    d = decide(crit, 0.8, 0.8, mode="team")
+    assert d.automatic and d.mode == "team"                          # critical + low urgency confidence ignored
+    tie = _jev_result(team_probabilities={"Billing & Payments": 0.5, "Technical Support": 0.45})
+    assert any("Near tie" in r for r in decide(tie, 0.4, 0.8, mode="team").reasons)
+    low = decide(_jev_result(team_confidence=0.5), 0.8, 0.8, mode="team")
+    assert not low.automatic and low.reasons == ["Team confidence 0.50 is below 0.80"]
+
+
+def test_review_mode_urgency_ignores_team():
+    unsure_team = _jev_result(team_probabilities={"Billing & Payments": 0.5, "Technical Support": 0.5}, team_confidence=0.4)
+    assert decide(unsure_team, 0.8, 0.8, mode="urgency").automatic   # team doubts ignored
+    d = decide(_jev_result(urgency="critical", urgency_probabilities={"critical": 0.7}), 0.8, 0.8, mode="urgency")
+    assert not d.automatic and d.reasons == ["Critical urgency always requires human review",
+                                             "Urgency probability 0.70 is below 0.80"]
+    # chat models have no per-question confidence: the overall one is used
+    chat = TriageResult(team="Billing & Payments", urgency="low", confidence=0.5)
+    assert decide(chat, 0.8, 0.8, mode="urgency").reasons == ["Urgency confidence 0.50 is below 0.80"]
+
+
+@pytest.mark.asyncio
+async def test_run_ticket_review_mode_override():
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=DECISIONS_RESPONSE)   # critical urgency, team confidence 1.0
+
+    client = OpenRouterClient("k", "https://or.test/api/v1", 5)
+    client.http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    triager = Triager(client, _settings(jev_model="typesafe/jev-1.13", compare_models=[]), load_teams(ROOT / "teams.yaml"))
+    (default,), _ = await triager.run_ticket(Ticket(body="checkout is down"))
+    (team,), _ = await triager.run_ticket(Ticket(body="checkout is down"), review_mode="team")
+    assert not default.decision.automatic and default.decision.mode == "default"
+    assert team.decision.automatic and team.decision.mode == "team"
+    assert team.decision.prob_source == "decision model"

@@ -27,6 +27,7 @@ async function init() {
   document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => switchTab(b.dataset.tab)));
   $("#ticket-form").addEventListener("submit", onTriage);
   $("#btn-example").addEventListener("click", loadExample);
+  document.querySelectorAll("button.demo").forEach((b) => b.addEventListener("click", loadDemo));
   $("#btn-preview").addEventListener("click", onPreview);
   document.addEventListener("click", (ev) => {
     const btn = ev.target.closest("[data-copy]");
@@ -45,6 +46,7 @@ async function init() {
     $("#f-tier").innerHTML = '<option value="">(none)</option>' +
       tiers.map((t) => `<option value="${esc(t.name)}" title="${esc(t.description)}">${esc(t.name)}</option>`).join("");
     CFG = models;
+    document.querySelectorAll(".review-mode").forEach((s) => (s.value = models.human_review_mode || "default"));
     const others = models.models.filter((m) => !m.is_jev).map((m) => esc(m.id) + (m.known === false ? " ⚠ not found on OpenRouter" : ""));
     $("#model-info").innerHTML = `jev = <b>${esc(models.jev_model)}</b>${others.length ? " · compared with " + others.join(", ") : ""}`;
     renderTeams(teams, skills);
@@ -67,11 +69,23 @@ function switchTab(name) {
   document.querySelectorAll(".panel").forEach((p) => (p.hidden = p.id !== `tab-${name}`));
 }
 
-function loadExample() {
-  const ex = EXAMPLES[exampleIdx++ % EXAMPLES.length];
+function fillTicket(ex) {
   $("#f-subject").value = ex.subject;
   $("#f-body").value = ex.body;
   $("#f-tier").value = ex.tier;
+}
+
+function loadExample() {
+  fillTicket(EXAMPLES[exampleIdx++ % EXAMPLES.length]);
+}
+
+// Demo buttons load the first three examples (automatic / critical / ambiguous) without running the triage.
+function loadDemo(ev) {
+  const i = Number(ev.currentTarget.dataset.demo);
+  fillTicket(EXAMPLES[i]);
+  exampleIdx = i + 1;
+  $("#single-result").innerHTML = "";
+  $("#single-status").textContent = "";
 }
 
 function renderTeams(teams, skills) {
@@ -193,7 +207,7 @@ async function onTriage(ev) {
   $("#single-result").innerHTML = "";
   let timer = null;
   try {
-    const r = await fetch("/api/triage/stream", {
+    const r = await fetch(`/api/triage/stream?review_mode=${encodeURIComponent($("#f-review").value)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(ticketPayload()),
@@ -244,18 +258,25 @@ async function onTriage(ev) {
   }
 }
 
+// Two zones split at the auto-assign threshold: below = needs human review, at/above = automatic.
 function gauge(label, value, threshold) {
-  const lo = Math.min(0.6, threshold);
   const pos = value == null ? null : Math.max(0, Math.min(1, value));
+  const human = threshold * 100, auto = 100 - human;
   return `<div class="small"><b>${label}</b>: ${value == null ? "—" : value.toFixed(2)} <span class="muted">(auto ≥ ${threshold.toFixed(2)})</span></div>
     <div class="gauge">
-      <div class="z" style="width:${lo * 100}%;background:var(--bad-soft)"></div>
-      <div class="z" style="width:${(threshold - lo) * 100}%;background:var(--warn-soft)"></div>
-      <div class="z" style="width:${(1 - threshold) * 100}%;background:var(--ok-soft)"></div>
+      <div class="z" style="width:${human}%;background:var(--warn-soft)"></div>
+      <div class="z" style="width:${auto}%;background:var(--ok-soft)"></div>
       ${pos == null ? "" : `<div class="marker" style="left:calc(${pos * 100}% - 1px)"></div>`}
     </div>
-    <div class="gauge-labels small muted"><span>0</span><span>needs human</span><span>automatic</span><span>1</span></div>`;
+    <div class="gauge-labels small muted gauge-2">
+      <span style="width:${human}%">0 · needs human</span><span style="width:${auto}%">automatic · 1</span></div>`;
 }
+
+const REVIEW_MODE_LABEL = {
+  default: "default (team + confidence + critical urgency)",
+  team: "team only (team probability, tie, team confidence)",
+  urgency: "urgency only (critical, urgency probability, urgency confidence)",
+};
 
 function verdictHtml(run) {
   if (!run) return "";
@@ -267,7 +288,8 @@ function verdictHtml(run) {
   const title = d && d.automatic ? `AUTOMATIC ASSIGNMENT → ${esc(run.result.team)}` : "REQUIRES HUMAN INTERVENTION";
   const reasons = d && d.reasons.length ? `<ul>${d.reasons.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`
     : `<ul><li>High team probability and high confidence.</li></ul>`;
-  return `<div class="verdict ${cls}"><div class="title">${title}</div>${reasons}</div>`;
+  const modeNote = d && d.mode ? `<div class="small" style="margin-top:6px;color:var(--muted)">Human review mode: <b>${esc(REVIEW_MODE_LABEL[d.mode] || d.mode)}</b></div>` : "";
+  return `<div class="verdict ${cls}"><div class="title">${title}</div>${reasons}${modeNote}</div>`;
 }
 
 // colour by position: most severe rank = critical style, then high, medium, and low for the rest
@@ -286,7 +308,7 @@ function kpiTiles(run, thrP, thrC) {
   if (!x) return "";
   const d = run.decision || {};
   const pct = (v) => `${Math.round(v * 100)}%`;
-  const zone = (v, thr) => (v >= thr ? "ok" : v >= Math.min(0.6, thr) ? "warn" : "bad");
+  const zone = (v, thr) => (v >= thr ? "ok" : "warn"); // same two zones as the gauges: automatic / needs human
 
   const probs = Object.entries(x.team_probabilities || {}).sort((a, b) => b[1] - a[1]);
   const runnerUp = probs.find(([t]) => t !== x.team);
@@ -296,7 +318,7 @@ function kpiTiles(run, thrP, thrC) {
       + (topProb >= thrP ? `Meets the ${pct(thrP)} auto-assign threshold.` : `Below the ${pct(thrP)} auto-assign threshold.`)
       + (d.prob_source === "decision model" ? " Probabilities computed by the decision model." : " Probabilities self-reported by the model.");
 
-  const confText = (x.confidence >= thrC ? `Meets the ${pct(thrC)} auto-assign threshold. ` : `Below the ${pct(thrC)} auto-assign threshold. `)
+  let confText = (x.confidence >= thrC ? `Meets the ${pct(thrC)} auto-assign threshold. ` : `Below the ${pct(thrC)} auto-assign threshold. `)
     + (run.api === "decisions" ? "The lower of jev's confidence in the team and in the urgency." : "The model's confidence in the overall triage (team + urgency).");
 
   const urgWhy = x.urgency_reason && x.urgency_reason !== x.urgency_meaning ? ` <b>Why:</b> ${esc(x.urgency_reason)}` : "";
@@ -327,17 +349,28 @@ function kpiTiles(run, thrP, thrC) {
   const derived = run.api === "decisions"
     ? `<span class="qtype" title="Not a question: the lower of the confidences jev returned for the team and urgency choices">from choice</span>` : "";
 
-  const tile = (label, valueHtml, cls, text, tag = "") => `<div class="kpi ${cls}">
-      <div class="kpi-label">${label}${tag}</div><div class="kpi-value">${valueHtml}</div><div class="kpi-text">${text}</div></div>`;
+  // jev's own confidence for the question behind a tile (choice/score answers; noul answers have none)
+  const jevConf = (v, note = "") => (v == null ? (note ? `<div class="kpi-conf muted">${note}</div>` : "")
+    : `<div class="kpi-conf" title="Confidence jev returned for this answer"><span>jev confidence <b>${pct(v)}</b></span>
+        <div class="kpi-conf-track"><div class="kpi-conf-fill kpi-conf-${zone(v, thrC)}" style="width:${v * 100}%"></div></div></div>`);
+  const isDec = run.api === "decisions";
+  if (isDec && x.team_confidence != null && x.urgency_confidence != null) {
+    confText = `Lower of jev's confidence in the team (${pct(x.team_confidence)}) and in the urgency (${pct(x.urgency_confidence)}). `
+      + (x.confidence >= thrC ? `Meets the ${pct(thrC)} auto-assign threshold.` : `Below the ${pct(thrC)} auto-assign threshold.`);
+  }
+
+  const tile = (label, valueHtml, cls, text, tag = "", conf = "") => `<div class="kpi ${cls}">
+      <div class="kpi-label">${label}${tag}</div><div class="kpi-value">${valueHtml}</div>${conf}<div class="kpi-text">${text}</div></div>`;
 
   return `<div class="kpis">
-    ${tile("Team", esc(x.team), "kpi-team", esc(teamText), qtype("team"))}
+    ${tile("Team", esc(x.team), "kpi-team", esc(teamText), qtype("team"), jevConf(x.team_confidence))}
     ${tile("Confidence", pct(x.confidence), `kpi-${zone(x.confidence, thrC)}`, esc(confText), derived)}
-    ${tile("Urgency", esc(x.urgency.toUpperCase()), `kpi-u-${esc(x.urgency)}`, urgText, qtype("urgency"))}
+    ${tile("Urgency", esc(x.urgency.toUpperCase()), `kpi-u-${esc(x.urgency)}`, urgText, qtype("urgency"), jevConf(x.urgency_confidence))}
     ${tile("Severity", x.severity_score == null ? "—" : `${esc(x.severity_level)} <span class="kpi-sub">${x.severity_score}/100</span>`,
-      x.severity_score == null ? "" : `kpi-sev-${sevIdx(x.severity_level)}`, sevText, qtype("severity"))}
+      x.severity_score == null ? "" : `kpi-sev-${sevIdx(x.severity_level)}`, sevText, qtype("severity"), jevConf(x.severity_confidence))}
     ${tile("Escalate", `${x.escalate ? "YES" : "NO"}${pEsc != null ? ` <span class="kpi-sub">${pct(pEsc)}</span>` : ""}`,
-      x.escalate ? "kpi-bad" : "kpi-ok", esc(escText), qtype("escalate"))}
+      x.escalate ? "kpi-bad" : "kpi-ok", esc(escText), qtype("escalate"),
+      jevConf(null, isDec ? "noul answers have no confidence: the % is P(yes)" : ""))}
   </div>`;
 }
 
@@ -516,7 +549,7 @@ async function runBatch(blob, name) {
   try {
     const fd = new FormData();
     fd.append("file", blob, name);
-    const r = await fetch("/api/batch", { method: "POST", body: fd });
+    const r = await fetch(`/api/batch?review_mode=${encodeURIComponent($("#f-review-batch").value)}`, { method: "POST", body: fd });
     if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
     const reader = r.body.getReader();
     const dec = new TextDecoder();
@@ -640,11 +673,15 @@ function renderBatch(state) {
 
   $("#batch-result").innerHTML = `
     <div class="card"><h2>Summary · ${state.total} tickets</h2>
-      <div class="table-wrap"><table><thead><tr><th>Model</th><th class="num">Avg latency</th><th class="num">p95 latency</th>
-        <th class="num">Avg TTFT</th><th class="num">p95 TTFT</th><th class="num">Tokens</th><th class="num">Total cost</th>
+      <div class="table-wrap"><table><thead><tr><th>Model</th>
+        <th class="num help" title="Average time per request, from sending it to receiving the full answer.">Avg latency</th>
+        <th class="num help" title="95% of requests finished within this time; only the slowest 5% took longer. Shows the worst case users actually hit, which the average hides.">p95 latency</th>
+        <th class="num help" title="Average time until the model starts answering (time to first token). Not available for jev: the Decisions API doesn't stream.">Avg TTFT</th>
+        <th class="num help" title="95% of requests started answering within this time; only the slowest 5% took longer.">p95 TTFT</th><th class="num">Tokens</th><th class="num">Total cost</th>
         <th class="num">Cost / 1k</th><th class="num">Auto</th><th class="num">Errors</th><th class="num">Agree w/ jev (team / urg.)</th><th class="num">Avg severity</th><th class="num">|Δ| severity vs jev</th>${accHead}${urgHead}${sevHead}</tr></thead>
         <tbody>${rows}</tbody></table></div>
-      <p class="small muted">★ = best in column. "Acc. when auto" = team accuracy on the tickets the model would have auto-assigned; this is the number to watch when tuning the thresholds.</p>
+      <p class="small muted">★ = best in column. <b>p95</b> = 95% of tickets were at least this fast; the slowest 5% took longer.
+        A p95 far above the average means the model is occasionally very slow. "Acc. when auto" = team accuracy on the tickets the model would have auto-assigned; this is the number to watch when tuning the thresholds.</p>
     </div>
     <div class="charts">${charts}</div>
     ${confusion}

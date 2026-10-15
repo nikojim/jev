@@ -66,6 +66,7 @@ The app detects decision models by id (`typesafe/…`, `…-decisions`). It also
 | `MAX_SKILLS_PER_TICKET` | Maximum number of skills added to one ticket's prompt | `3` |
 | `AUTO_ASSIGN_MIN_PROB` | Minimum top-team probability for automatic assignment | `0.80` |
 | `AUTO_ASSIGN_MIN_CONFIDENCE` | Minimum model confidence for automatic assignment | `0.80` |
+| `HUMAN_REVIEW_MODE` | What triggers human review: `default`, `team` or `urgency` (see below) | `default` |
 | `MAX_CONCURRENCY` | Maximum number of model requests running at the same time | `4` |
 | `REQUEST_TIMEOUT` | Seconds before a model call times out | `60` |
 
@@ -152,6 +153,8 @@ Four example skills are included: `security-incident`, `billing-refunds`, `outag
 
    When jev is called through the Decisions API, each tile carries a tag with the question type behind it: `choice` (Team, Urgency), `score` (Severity) or `noul` (Escalate). Confidence is tagged `from choice`, because it isn't a question: it comes from the confidences of the choice answers. Hover over a tag to see what the type returns.
 
+   The Team, Urgency and Severity tiles also show **jev's confidence** for that answer, with a small bar colored against the confidence threshold. The Confidence tile shows how its value comes from the team and urgency confidences. Escalate has no confidence, because `noul` answers only return P(yes).
+
    Below the tiles: the AUTOMATIC / REQUIRES HUMAN INTERVENTION verdict with its reasons, gauges for team probability, confidence and severity, the urgency block, and probability bars per team (and per urgency level for jev).
 4. **Comparison table**: for each model, its team, urgency, decision, latency, TTFT, input/output/total tokens, cost (USD), and whether it agrees with jev. ★ marks the best value in each column.
 5. One card per model with its team, urgency, severity, decision and explanations. The chat models' cards also have a draft reply and next steps; jev's card shows its probabilities instead, since a decision model doesn't generate text. jev's card is highlighted.
@@ -173,6 +176,18 @@ Otherwise it is marked **REQUIRES HUMAN INTERVENTION**, and each reason is liste
 > The self-reported probabilities are not calibrated. Run a labeled batch and look at **Acc. when auto** (the accuracy on tickets that would have been auto-assigned) before you trust the thresholds, then tune them in `.env`.
 
 The same rule is applied to the other models, so their auto-assign rates can be compared.
+
+#### Human review modes
+
+`HUMAN_REVIEW_MODE` in `.env` sets the default rule. You can also choose the mode per run with the **Human review** selector, in both the single-ticket form and the batch tab:
+
+| Mode | A ticket goes to human review when… |
+|---|---|
+| `default` | Everything above: team probability, wrong top team, near tie, overall confidence, critical urgency |
+| `team` | **Only the team** is in doubt: team probability below the threshold, wrong top team, near tie, or team confidence below the threshold. Critical urgency does **not** trigger review. |
+| `urgency` | **Only the urgency** is in doubt or critical: urgency is critical, the urgency probability is below `AUTO_ASSIGN_MIN_PROB`, or the urgency confidence is below `AUTO_ASSIGN_MIN_CONFIDENCE`. Team doubts do **not** trigger review. |
+
+jev returns a confidence for each question, so `team` uses jev's team confidence and `urgency` uses its urgency confidence and probabilities. Chat models only have one overall confidence, which is used in both modes, and they have no urgency probabilities. The verdict shows which mode decided. In the API, add `?review_mode=default|team|urgency` to `/api/triage`, `/api/triage/stream` or `/api/batch`.
 
 **Escalate is not human intervention.** *Human intervention* is the app's decision about whether the team **assignment** can be automatic. *Escalate* is the model's judgment that the ticket should go **beyond the normal support queue** (on-call engineering, a senior agent, management). Escalate doesn't change the automatic / human-review decision. A ticket can be auto-assigned and escalated (jev is sure it's Technical Support and it's a production outage), or need human review without being escalated (a vague ticket that isn't urgent).
 
@@ -257,6 +272,8 @@ The summary shows, for each model:
 - **Tokens:** `prompt_tokens` / `completion_tokens` reported in OpenRouter's usage data (for jev: `input_tokens` / `output_tokens`; jev only charges for input tokens).
 - **Cost:** the USD cost OpenRouter reports for each request. If it is missing, the cost is calculated from the model's price in OpenRouter's `/models` list (marked with `*`).
 - Requests use `temperature: 0`. Structured output is requested with a strict JSON schema, falling back to JSON mode or plain text for models that don't support it.
+
+- **p95 (percentile 95):** in batch runs, 95% of the tickets were at least this fast and only the slowest 5% took longer (with 40 tickets, the 38th fastest). A p95 far above the average means the model is occasionally very slow, which the average hides. With very few tickets, p95 is about the same as the maximum.
 
 Latency varies from run to run, and `MAX_CONCURRENCY` affects it too. Compare models on a batch, not on a single ticket.
 

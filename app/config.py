@@ -24,6 +24,7 @@ class Settings:
     max_skills: int
     auto_min_prob: float
     auto_min_confidence: float
+    human_review_mode: str
     max_concurrency: int
     request_timeout: float
 
@@ -54,6 +55,10 @@ def load_settings() -> Settings:
     if not jev_model:
         raise ConfigError("JEV_MODEL is not set")
 
+    review_mode = os.getenv("HUMAN_REVIEW_MODE", "default").strip().lower() or "default"
+    if review_mode not in ("default", "urgency", "team"):
+        raise ConfigError(f"HUMAN_REVIEW_MODE must be default, urgency or team, got {review_mode!r}")
+
     teams_file = _path("TEAMS_FILE", "teams.yaml")
     skills_dir = _path("SKILLS_DIR", "skills")
     severity_file = _path("SEVERITY_FILE", "severity.yaml")
@@ -71,6 +76,7 @@ def load_settings() -> Settings:
         max_skills=max(0, int(_float("MAX_SKILLS_PER_TICKET", "3"))),
         auto_min_prob=_float("AUTO_ASSIGN_MIN_PROB", "0.80"),
         auto_min_confidence=_float("AUTO_ASSIGN_MIN_CONFIDENCE", "0.80"),
+        human_review_mode=review_mode,
         max_concurrency=max(1, int(_float("MAX_CONCURRENCY", "4"))),
         request_timeout=_float("REQUEST_TIMEOUT", "60"),
     )

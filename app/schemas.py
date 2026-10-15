@@ -40,6 +40,10 @@ class TriageResult(BaseModel):
     severity_score: int | None = Field(default=None, ge=0, le=100)
     severity_reason: str = ""
     escalate_probability: float | None = None  # only from decision models (noul answer)
+    # per-question confidence returned by decision models (choice/score answers; noul has none)
+    team_confidence: float | None = None
+    urgency_confidence: float | None = None
+    severity_confidence: float | None = None
 
     @computed_field
     @property
@@ -68,11 +72,16 @@ class RunMetrics(BaseModel):
     cost_source: Literal["openrouter", "pricing", "unknown"] = "unknown"
 
 
+REVIEW_MODES = ("default", "urgency", "team")
+ReviewMode = Literal["default", "urgency", "team"]
+
+
 class Decision(BaseModel):
     automatic: bool
     top_prob: float | None = None
     prob_source: Literal["self-reported", "logprobs+self-reported", "decision model"] = "self-reported"
     reasons: list[str] = []
+    mode: ReviewMode = "default"  # which rule decided human review (HUMAN_REVIEW_MODE)
 
 
 class ModelRun(BaseModel):
@@ -86,6 +95,7 @@ class ModelRun(BaseModel):
     agrees_team: bool | None = None
     agrees_urgency: bool | None = None
     request: dict | None = None  # JSON body sent to OpenRouter (last attempt)
+    team_logprob: float | None = None  # probability of the team tokens, when the provider returns logprobs
 
 
 class ComparisonResponse(BaseModel):

@@ -151,6 +151,8 @@ details.req { border-top: 1px solid var(--border); padding: 6px 0; }
 .mprog-bar.fail { background: var(--bad); }
 @keyframes mprog-slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
 @media (prefers-reduced-motion: reduce) { .mprog-bar.running { animation: none; width: 100%; opacity: .5; } }
+label.inline { display: flex; flex-direction: row; align-items: center; gap: 6px; margin: 0; font-weight: 500; }
+label.inline select { width: auto; }
 .team-item { padding: 8px 0; border-bottom: 1px solid var(--border); }
 .team-item:last-child { border-bottom: none; }
 
@@ -196,3 +198,18 @@ details.req { border-top: 1px solid var(--border); padding: 6px 0; }
 .qtype-choice { color: var(--accent); border-color: var(--accent); }
 .qtype-score { color: var(--warn); border-color: var(--warn); }
 .qtype-noul { color: var(--ok); border-color: var(--ok); }
+/* jev's per-answer confidence inside each tile */
+.kpi-conf { font-size: 13px; margin: -2px 0 8px; }
+.kpi-conf span { display: block; margin-bottom: 3px; }
+.kpi-conf-track { height: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 3px; overflow: hidden; }
+.kpi-conf-fill { height: 100%; }
+.kpi-conf-ok { background: var(--ok); } .kpi-conf-warn { background: var(--warn); } .kpi-conf-bad { background: var(--bad); }
+/* two-zone gauge labels (needs human | automatic), aligned with the threshold */
+.gauge-2 { justify-content: flex-start; }
+.gauge-2 span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gauge-2 span:last-child { text-align: right; }
+/* demo presets next to "Load example" */
+.demo-buttons { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+button.demo { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+th.help { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
