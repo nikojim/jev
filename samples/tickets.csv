@@ -1,0 +1,41 @@
+subject,body,customer_tier,expected_team,expected_urgency,expected_severity
+Charged twice this month,"Hi, I just checked my bank statement and I was charged $49 twice on October 3rd for the same Pro subscription. Please refund the duplicate charge.",pro,Billing & Payments,high,35
+Need invoice for September,Could you send me a PDF invoice for September with our company VAT number included? Our accounting team needs it by end of month.,enterprise,Billing & Payments,low,5
+Refund request after cancellation,I cancelled my plan on day 2 of the billing cycle but was billed for the whole month. Your policy says pro-rated refunds apply. Can you process it?,pro,Billing & Payments,medium,25
+Update credit card,My card expires next week. How do I change the payment method on file so my service isn't interrupted?,free,Billing & Payments,low,5
+Downgrade plan,We want to move from Enterprise to Pro starting next billing cycle. What happens to the extra seats we already paid for?,enterprise,Billing & Payments,medium,10
+Payment failed - account suspended,"Our payment failed overnight and now the whole team is locked out of the workspace. 120 people can't work. We need this restored immediately, we'll pay right now.",enterprise,Billing & Payments,critical,85
+Cobro incorrecto en mi factura,"Hola, en la factura de este mes aparece un cargo adicional de 30 USD que no reconozco. ¿Me pueden explicar a qué corresponde?",pro,Billing & Payments,medium,25
+Tax exemption certificate,We are a registered non-profit. Where can we upload our tax-exemption certificate so sales tax is removed from future invoices?,pro,Billing & Payments,low,5
+Production API returning 500,Since 09:40 UTC every call to /v2/orders returns HTTP 500. Our checkout is down and we are losing sales every minute. Request id: 7f3a-22c1.,enterprise,Technical Support,critical,95
+App crashes on login,"The mobile app (iOS 18, version 4.2.1) crashes right after I enter my credentials. Reinstalling didn't help.",pro,Technical Support,high,55
+Slow dashboard loading,The analytics dashboard takes about 40 seconds to load since yesterday. It used to be instant. Other pages are fine.,pro,Technical Support,medium,40
+Webhook not firing,Our Slack integration stopped receiving webhook events for new tickets. The endpoint is reachable and returns 200 when tested manually.,enterprise,Technical Support,high,60
+CSV export has broken characters,"When I export reports to CSV, accented characters like é and ñ show up as garbage in Excel.",free,Technical Support,low,15
+Error al sincronizar datos,"Desde la actualización de ayer, la sincronización con nuestro ERP falla con el error 'timeout after 30s'. Tenemos pedidos sin procesar.",enterprise,Technical Support,high,70
+Typo in settings page,Minor thing: the settings page says 'Notifcations' instead of 'Notifications'.,free,Technical Support,low,3
+Rate limit too aggressive,"We keep hitting 429 errors at around 50 requests per minute, but our plan is supposed to allow 300. Is something misconfigured on our account?",enterprise,Technical Support,medium,45
+Can't reset my password,I requested a password reset three times but never received the email. I checked spam too.,free,Account & Access,medium,40
+Lost access to MFA device,I lost my phone and can't get past two-factor authentication. I'm the only admin on our account.,enterprise,Account & Access,high,60
+Add new users to workspace,How do I invite 5 new colleagues to our workspace and give two of them admin rights?,pro,Account & Access,low,5
+Close my account,Please close my account. I no longer use the service.,free,Account & Access,low,5
+Change account owner,"Our previous admin left the company. We need to transfer account ownership to me, the new IT manager.",enterprise,Account & Access,medium,30
+No puedo iniciar sesión,Me aparece 'usuario bloqueado' cuando intento entrar. No recuerdo haber fallado la contraseña muchas veces.,pro,Account & Access,medium,45
+SSO login loop,"After enabling SAML SSO with Okta, all our users get stuck in a redirect loop and nobody can log in.",enterprise,Account & Access,critical,90
+Feature request: dark mode,"It would be great to have a dark mode, I use the app late at night a lot.",free,Product & Feature Requests,low,2
+How to schedule reports,Is there a way to automatically email the weekly report to my manager every Monday?,pro,Product & Feature Requests,low,5
+Bulk edit request,We manage thousands of records and editing them one by one is painful. Any plans for bulk editing? This is blocking our renewal decision.,enterprise,Product & Feature Requests,medium,25
+Onboarding help,We just signed up. Is there a guide or a call available to help us set up our first project?,pro,Product & Feature Requests,low,5
+¿Se puede integrar con Google Sheets?,Queremos enviar los datos automáticamente a Google Sheets. ¿Existe una integración o está en el roadmap?,pro,Product & Feature Requests,low,3
+Feedback on new editor,The new editor is much harder to use than the old one. Several of our team members are frustrated. Can we switch back?,enterprise,Product & Feature Requests,medium,30
+Suspicious login from another country,I got an alert about a login from Russia that wasn't me. I changed my password but I'm worried data was accessed.,pro,Security & Compliance,critical,85
+Phishing email using your brand,I received an email that looks like it's from you asking me to 'verify billing details' on a weird domain. Forwarding it so you can act.,free,Security & Compliance,high,65
+GDPR data deletion request,"Under GDPR Article 17, I request deletion of all personal data you hold about me.",free,Security & Compliance,medium,35
+Vulnerability report,I found a stored XSS in the comments field of shared projects. I can provide a PoC privately. Do you have a disclosure program?,free,Security & Compliance,high,75
+SOC 2 report request,Our security team needs your latest SOC 2 Type II report before we can sign the contract.,enterprise,Security & Compliance,low,10
+Solicitud de acceso a mis datos,"Conforme al RGPD, solicito una copia de todos los datos personales que tienen sobre mí.",free,Security & Compliance,medium,30
+Something wrong with my account and bill,My account looks weird and I think the bill is wrong too. Please help.,free,Billing & Payments,medium,30
+Locked out after payment change,I updated my credit card and right after that I couldn't log in anymore. Is this related?,pro,Account & Access,high,50
+Data missing after export,I exported my data to delete my account but half the projects are missing from the file.,pro,Technical Support,high,60
+Someone changed our plan,Our plan was upgraded to Enterprise and none of the admins did it. Was our account compromised or is this a billing error?,enterprise,Security & Compliance,high,70
+Need help ASAP,Nothing works. Please call me.,enterprise,Technical Support,high,60

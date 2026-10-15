@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>jev · Ticket Triage</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="logo">jev</span> Ticket Triage</div>
+  <div id="model-info" class="muted small"></div>
+</header>
+
+<main>
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="single" role="tab">Single ticket</button>
+    <button class="tab" data-tab="batch" role="tab">Batch (CSV)</button>
+    <button class="tab" data-tab="teams" role="tab">Configuration</button>
+  </nav>
+
+  <!-- Single ticket -->
+  <section id="tab-single" class="panel">
+    <form id="ticket-form" class="card form">
+      <div class="row">
+        <label class="grow">Subject
+          <input id="f-subject" type="text" placeholder="e.g. Charged twice this month">
+        </label>
+        <label>Customer tier
+          <select id="f-tier">
+            <option value="">(none)</option>
+            <option>free</option><option>pro</option><option>enterprise</option><!-- replaced by tiers.yaml at load -->
+          </select>
+        </label>
+      </div>
+      <label>Body
+        <textarea id="f-body" rows="6" required placeholder="Paste the ticket text…"></textarea>
+      </label>
+      <div class="row actions">
+        <button type="submit" class="primary" id="btn-triage">Triage</button>
+        <button type="button" id="btn-preview">Preview prompt</button>
+        <button type="button" id="btn-example">Load example</button>
+        <span id="single-status" class="muted small"></span>
+      </div>
+    </form>
+    <div id="single-result"></div>
+  </section>
+
+  <!-- Batch -->
+  <section id="tab-batch" class="panel" hidden>
+    <div class="card form">
+      <p class="muted small">CSV columns: <code>subject</code>, <code>body</code> (required), <code>customer_tier</code>,
+        <code>expected_team</code>, <code>expected_urgency</code> (optional; the labels enable accuracy metrics).</p>
+      <div class="row actions">
+        <input type="file" id="f-csv" accept=".csv,text/csv">
+        <button class="primary" id="btn-batch">Run batch</button>
+        <button id="btn-sample">Run sample CSV</button>
+        <button id="btn-download" disabled>Download results</button>
+      </div>
+      <div id="batch-progress" hidden>
+        <div class="progress"><div class="progress-bar" id="progress-bar"></div></div>
+        <span id="progress-text" class="muted small"></span>
+      </div>
+    </div>
+    <div id="batch-result"></div>
+  </section>
+
+  <!-- Teams -->
+  <section id="tab-teams" class="panel" hidden>
+    <div class="card">
+      <p class="muted small">Loaded at startup from <code>teams.yaml</code>, <code>tiers.yaml</code>, <code>skills/*/SKILL.md</code> and <code>severity.yaml</code>. Edit the files and restart the app to apply changes.</p>
+      <div id="teams-list"></div>
+    </div>
+  </section>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

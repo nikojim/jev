@@ -1,0 +1,18 @@
+# Teams a ticket can be routed to. Edit freely and restart the app.
+# A clear description and a few examples noticeably improve routing.
+teams:
+  - name: Billing & Payments
+    description: Invoices, charges, refunds, payment methods, subscription plan changes.
+    examples: ["I was charged twice", "Need a copy of my invoice"]
+  - name: Technical Support
+    description: Bugs, errors, outages, performance problems, integrations and API issues.
+    examples: ["The app crashes on login", "API returns 500"]
+  - name: Account & Access
+    description: Login, password resets, MFA, user/role management, account closure.
+    examples: ["Can't reset my password", "Add a user to my workspace"]
+  - name: Product & Feature Requests
+    description: How-to questions, feature requests, product feedback, onboarding.
+    examples: ["Can you add dark mode?", "How do I export reports?"]
+  - name: Security & Compliance
+    description: Suspected breaches, phishing, data/privacy (GDPR) requests, vulnerability reports.
+    examples: ["Someone accessed my account", "Delete all my personal data"]

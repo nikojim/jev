@@ -1,0 +1,21 @@
+# Severity ranks: how serious a ticket's impact is (independent of urgency = how fast to respond).
+# Edit freely and restart the app. Each rank covers scores from its min_score (inclusive) up to the
+# next rank's min_score - 1; the most severe rank goes up to 100. One rank must have min_score: 0.
+# The ranks build the chat-model rubric, jev's severity scale and the SEV level shown in the UI.
+ranks:
+  - name: SEV-1
+    label: Critical impact
+    min_score: 80
+    description: Confirmed security breach or data loss, full production outage, or core functionality broken for many users or a whole enterprise account with revenue impact.
+  - name: SEV-2
+    label: Major impact
+    min_score: 60
+    description: An important feature broken or a key customer blocked, with no reasonable workaround.
+  - name: SEV-3
+    label: Moderate impact
+    min_score: 30
+    description: A single user blocked, or degraded service with a workaround.
+  - name: SEV-4
+    label: Low impact
+    min_score: 0
+    description: Minor or cosmetic issue, feedback, how-to or billing question, time-bound request.

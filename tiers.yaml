@@ -1,0 +1,10 @@
+# Customer tiers shown in the UI selector and explained to the models (to weigh urgency and escalation).
+# Edit freely and restart the app. Tier names in a batch CSV don't have to be listed here: unknown
+# names are passed to the models as-is, without a description.
+tiers:
+  - name: free
+    description: Free plan. No SLA; best-effort support.
+  - name: pro
+    description: Paying customer on a self-serve plan. Standard support SLA.
+  - name: enterprise
+    description: Large contract with a dedicated SLA, many users and high revenue at stake. Issues blocking an enterprise account deserve higher urgency and escalation.
